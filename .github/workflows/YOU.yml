@@ -1,0 +1,119 @@
+name: RDP
+on:
+  workflow_dispatch:
+
+jobs:
+  secure-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 3600
+
+    steps:
+      
+      # ------------------------------------------------------------------
+      # Étape 1 : Création de l'utilisateur RDP (youssef91)
+      # ------------------------------------------------------------------
+      - name: Create RDP User with Static Password
+        run: |
+          # DÉFINITION DE VOS INFORMATIONS D'IDENTIFICATION
+          $username = "youssef91"
+          $password = "youssef1991" 
+
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+
+          # Création de l'utilisateur local s'il n'existe pas
+          if (-not (Get-LocalUser -Name $username -ErrorAction SilentlyContinue)) {
+              Write-Host "Création de l'utilisateur RDP '$username'..."
+              New-LocalUser -Name $username -Password $securePass -AccountNeverExpires
+          }
+          
+          # Ajout de l'utilisateur aux groupes Admin et Remote Desktop Users
+          Write-Host "Ajout de l'utilisateur aux groupes Administrateurs et Remote Desktop Users..."
+          Add-LocalGroupMember -Group "Administrators" -Member $username
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username
+
+          # Stockage des infos de connexion dans des variables d'environnement
+          echo "RDP_USERNAME=$username" >> $env:GITHUB_ENV
+          echo "RDP_PASSWORD=$password" >> $env:GITHUB_ENV
+          
+          # Vérification finale
+          if (-not (Get-LocalUser -Name $username)) {
+              Write-Error "La création de l'utilisateur $username a échoué"
+              exit 1
+          }
+
+      # ------------------------------------------------------------------
+      # Étape 2 : Configuration du RDP
+      # ------------------------------------------------------------------
+      - name: Configure Core RDP Settings
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP-Tailscale"
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service -Name TermService -Force
+      
+      # ------------------------------------------------------------------
+      # Étape 3 : Installation de Tailscale
+      # ------------------------------------------------------------------
+      - name: Install Tailscale
+        run: |
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $installerPath -Force
+
+      # ------------------------------------------------------------------
+      # Étape 4 : Connexion à Tailscale
+      # ------------------------------------------------------------------
+      - name: Establish Tailscale Connection
+        run: |
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          
+          $tsIP = $null
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 10) {
+              Write-Host "En attente d'une adresse IP Tailscale (tentative $($retries+1)/10)..."
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+          if (-not $tsIP) {
+              Write-Error "Adresse IP Tailscale non assignée. Arrêt."
+              exit 1
+          }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+
+      # ------------------------------------------------------------------
+      # Étape 5 : Vérification d'accessibilité
+      # ------------------------------------------------------------------
+      - name: Verify RDP Accessibility
+        run: |
+          Write-Host "Vérification de l'accessibilité RDP sur Tailscale IP: $env:TAILSCALE_IP"
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389 -ErrorAction SilentlyContinue
+          if (-not $testResult.TcpTestSucceeded) {
+              Write-Error "La connexion TCP au port RDP 3389 a échoué"
+              exit 1
+          }
+          Write-Host "Connectivité TCP réussie!"
+
+      # ------------------------------------------------------------------
+      # Étape 6 : Maintien de la connexion (Affichage des creds et boucle)
+      # ------------------------------------------------------------------
+      - name: Maintain Connection
+        run: |
+          Write-Host "`n=================================="
+          Write-Host "=== ACCÈS BUREAU À DISTANCE (RDP) ==="
+          Write-Host "=================================="
+          Write-Host "Adresse: $env:TAILSCALE_IP"
+          Write-Host "Username: $env:RDP_USERNAME" # Affiche youssef91
+          Write-Host "Password: $env:RDP_PASSWORD" # Affiche youssef1991
+          Write-Host "==================================`n"
+          Write-Host "Le RDP est actif. Annulez ce workflow pour éteindre la VM."
+          
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Actif - Annuler le workflow pour terminer"
+              Start-Sleep -Seconds 300
+          }
