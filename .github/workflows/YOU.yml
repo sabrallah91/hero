@@ -10,7 +10,7 @@ jobs:
     steps:
       
       # ------------------------------------------------------------------
-      # Étape 1 : Création de l'utilisateur RDP (youssef91)
+      # Étape 1 : Création de l'utilisateur RDP (youssef91) - CORRIGÉE
       # ------------------------------------------------------------------
       - name: Create RDP User with Static Password
         run: |
@@ -23,7 +23,8 @@ jobs:
           # Création de l'utilisateur local s'il n'existe pas
           if (-not (Get-LocalUser -Name $username -ErrorAction SilentlyContinue)) {
               Write-Host "Création de l'utilisateur RDP '$username'..."
-              New-LocalUser -Name $username -Password $securePass -AccountNeverExpires
+              # CORRECTION APPORTÉE ICI : Ajout de -Password $securePass
+              New-LocalUser -Name $username -Password $securePass -AccountNeverExpires 
           }
           
           # Ajout de l'utilisateur aux groupes Admin et Remote Desktop Users
@@ -108,8 +109,8 @@ jobs:
           Write-Host "=== ACCÈS BUREAU À DISTANCE (RDP) ==="
           Write-Host "=================================="
           Write-Host "Adresse: $env:TAILSCALE_IP"
-          Write-Host "Username: $env:RDP_USERNAME" # Affiche youssef91
-          Write-Host "Password: $env:RDP_PASSWORD" # Affiche youssef1991
+          Write-Host "Username: $env:RDP_USERNAME" # youssef91
+          Write-Host "Password: $env:RDP_PASSWORD" # youssef1991
           Write-Host "==================================`n"
           Write-Host "Le RDP est actif. Annulez ce workflow pour éteindre la VM."
           
