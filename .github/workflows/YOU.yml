@@ -16,7 +16,7 @@ jobs:
         run: |
           # DÉFINITION DE VOS INFORMATIONS D'IDENTIFICATION
           $username = "youssef91"
-          $password = "youssef1991" 
+          $password = "youssef@1991!" 
 
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
 
@@ -110,7 +110,7 @@ jobs:
           Write-Host "=================================="
           Write-Host "Adresse: $env:TAILSCALE_IP"
           Write-Host "Username: $env:RDP_USERNAME" # youssef91
-          Write-Host "Password: $env:RDP_PASSWORD" # youssef1991
+          Write-Host "Password: $env:RDP_PASSWORD" # youssef@1991!
           Write-Host "==================================`n"
           Write-Host "Le RDP est actif. Annulez ce workflow pour éteindre la VM."
           
